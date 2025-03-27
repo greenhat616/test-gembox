@@ -13,9 +13,11 @@ public partial class Form1 : Form
     private void Form1_Load(object sender, EventArgs e)
     {
         GemBox.Document.ComponentInfo.SetLicense("FREE-LIMITED-KEY");
-        GemBox.Document.ComponentInfo.FreeLimitReached += (sender, e) => e.FreeLimitReachedAction = GemBox.Document.FreeLimitReachedAction.ContinueAsTrial;
+        GemBox.Document.ComponentInfo.FreeLimitReached += (sender, e) =>
+            e.FreeLimitReachedAction = GemBox.Document.FreeLimitReachedAction.ContinueAsTrial;
         GemBox.Presentation.ComponentInfo.SetLicense("FREE-LIMITED-KEY");
-        GemBox.Presentation.ComponentInfo.FreeLimitReached += (sender, e) => e.FreeLimitReachedAction = GemBox.Presentation.FreeLimitReachedAction.ContinueAsTrial;
+        GemBox.Presentation.ComponentInfo.FreeLimitReached += (sender, e) =>
+            e.FreeLimitReachedAction = GemBox.Presentation.FreeLimitReachedAction.ContinueAsTrial;
     }
 
     private void label1_Click(object sender, EventArgs e)
@@ -52,7 +54,7 @@ public partial class Form1 : Form
         }
     }
 
-    private void button3_Click(object sender, EventArgs e)
+    private async void button3_Click(object sender, EventArgs e)
     {
         // check path
         if (string.IsNullOrWhiteSpace(rootPath.Text) || string.IsNullOrWhiteSpace(outPath.Text))
@@ -80,132 +82,167 @@ public partial class Form1 : Form
         string[] exts = { ".ppt", ".pptx", ".pdf", ".doc", ".docx" };
 
         status.Text = "Scanning...";
-        List<string> results = new();
-        ScanDirectory(rootPath.Text, exts, results);
-        status.Text = $"Scan complete; Found {results.Count} docs.";
-        var outpath = outPath.Text;
-        foreach (var item in results)
+        try
         {
-            try
+            var outPathText = outPath.Text;
+            var rootPathText = rootPath.Text;
+            await Task.Run(async () =>
             {
-                status.Text = $"Processing {item}";
-                var stripped_item_path = item.Replace(rootPath.Text, "");
-                var dirname = Path.GetDirectoryName(outpath + stripped_item_path);
-                if (!Directory.Exists(dirname))
-                {
-                    Directory.CreateDirectory(dirname);
-                }
-                if (copyRaw.Checked)
-                {
-                    // copy the file
-                    var out_file = outpath + stripped_item_path;
-                    File.Copy(item, out_file, true);
-                }
-
-                if (item.EndsWith(".ppt") || item.EndsWith(".pptx"))
-                {
-                    var presentation = GemBox.Presentation.PresentationDocument.Load(item);
-                    if (outTxt.Checked)
+                List<string> results = new();
+                await ScanDirectory(rootPathText, exts, results);
+                Invoke((MethodInvoker)delegate { status.Text = $"Found {results.Count} files, processing..."; });
+                foreach (var item in results)
+                    try
                     {
-                        var sb = new StringBuilder();
-
-                        var slide = presentation.Slides[0];
-
-                        foreach (var shape in slide.Content.Drawings.OfType<GemBox.Presentation.Shape>())
+                        Invoke((MethodInvoker)delegate { status.Text = $"Processing {item}"; });
+                        var stripped_item_path = item.Replace(rootPathText, "");
+                        var fileName = Path.GetFileName(item);
+                        var directoryName = Path.GetDirectoryName(outPathText + stripped_item_path);
+                        if (directoryName is null || fileName is null)
                         {
-                            sb.AppendFormat("Shape ShapeType={0}:", shape.ShapeType);
-                            sb.AppendLine();
+                            MessageBox.Show("Invalid directory name, skipped.");
+                            continue;
+                        }
+                        if (!Directory.Exists(directoryName)) Directory.CreateDirectory(directoryName);
 
-                            foreach (var paragraph in shape.Text.Paragraphs)
-                            {
-                                foreach (var run in paragraph.Elements.OfType<GemBox.Presentation.TextRun>())
-                                {
-                                    var isBold = run.Format.Bold;
-                                    var text = run.Text;
-
-                                    sb.AppendFormat("{0}{1}{2}", isBold ? "<b>" : "", text, isBold ? "</b>" : "");
-                                }
-
-                                sb.AppendLine();
-                            }
-
-                            sb.AppendLine("----------");
+                        // if file path is hidden or tmp office file, skipped
+                        if (fileName.StartsWith(".") || fileName.StartsWith("~"))
+                        {
+                            continue;
                         }
 
-                        var out_file = outpath + stripped_item_path + ".txt";
-                        File.WriteAllText(out_file, sb.ToString());
-                    }
+                        if (copyRaw.Checked)
+                        {
+                            // copy the file
+                            var out_file = outPathText + stripped_item_path;
+                            await FileExtensions.CopyAsync(item, out_file, true);
+                        }
 
-                    if (outPdf.Checked)
+                        if (item.EndsWith(".ppt") || item.EndsWith(".pptx"))
+                        {
+                            var presentation = GemBox.Presentation.PresentationDocument.Load(item);
+                            if (outTxt.Checked)
+                            {
+                                var sb = new StringBuilder();
+
+                                var slide = presentation.Slides[0];
+
+                                foreach (var shape in slide.Content.Drawings.OfType<GemBox.Presentation.Shape>())
+                                {
+                                    sb.AppendFormat("Shape ShapeType={0}:", shape.ShapeType);
+                                    sb.AppendLine();
+
+                                    foreach (var paragraph in shape.Text.Paragraphs)
+                                    {
+                                        foreach (var run in paragraph.Elements.OfType<GemBox.Presentation.TextRun>())
+                                        {
+                                            var isBold = run.Format.Bold;
+                                            var text = run.Text;
+
+                                            sb.AppendFormat("{0}{1}{2}", isBold ? "<b>" : "", text,
+                                                isBold ? "</b>" : "");
+                                        }
+
+                                        sb.AppendLine();
+                                    }
+
+                                    sb.AppendLine("----------");
+                                }
+
+                                var out_file = outPathText + stripped_item_path + ".txt";
+                                await File.WriteAllTextAsync(out_file, sb.ToString());
+                            }
+
+                            if (outPdf.Checked)
+                                await Task.Run(() => presentation.Save(outPathText + stripped_item_path + ".pdf"));
+                        }
+
+                        if (item.EndsWith(".pdf"))
+                        {
+                            var document = GemBox.Document.DocumentModel.Load(item);
+                            if (outTxt.Checked)
+                            {
+                                var text = document.Content.ToString();
+                                var out_file = outPathText + stripped_item_path + ".txt";
+                                await File.WriteAllTextAsync(out_file, text);
+                            }
+                        }
+
+                        if (item.EndsWith(".doc") || item.EndsWith(".docx"))
+                        {
+                            var document = GemBox.Document.DocumentModel.Load(item);
+                            if (outTxt.Checked)
+                            {
+                                var text = document.Content.ToString();
+                                var out_file = outPathText + stripped_item_path + ".txt";
+                                File.WriteAllTextAsync(out_file, text);
+                            }
+
+                            if (outPdf.Checked)
+                                await Task.Run(() => document.Save(outPathText + stripped_item_path + ".pdf"));
+                        }
+
+                        Invoke((MethodInvoker)delegate { status.Text = $"Processed {item}"; });
+                    }
+                    catch (GemBox.Presentation.FreeLimitReachedException)
                     {
-                        presentation.Save(outpath + stripped_item_path + ".pdf");
+                        Invoke((MethodInvoker)delegate { status.Text = "reach free limit, skipped."; });
                     }
-                }
-
-                if (item.EndsWith(".pdf"))
-                {
-                    var document = GemBox.Document.DocumentModel.Load(item);
-                    if (outTxt.Checked)
+                    catch (GemBox.Document.FreeLimitReachedException)
                     {
-                        string text = document.Content.ToString();
-                        var out_file = outpath + stripped_item_path + ".txt";
-                        File.WriteAllText(out_file, text);
+                        Invoke((MethodInvoker)delegate { status.Text = "reach free limit, skipped."; });
                     }
-                }
-
-                if (item.EndsWith(".doc") || item.EndsWith(".docx"))
-                {
-                    var document = GemBox.Document.DocumentModel.Load(item);
-                    if (outTxt.Checked)
-                    {
-                        string text = document.Content.ToString();
-                        var out_file = outpath + stripped_item_path + ".txt";
-                        File.WriteAllText(out_file, text);
-                    }
-
-                    if (outPdf.Checked)
-                    {
-                        document.Save(outpath + stripped_item_path + ".pdf");
-                    }
-                }
-
-                status.Text = $"Processed {item}";
-            }
-            catch (GemBox.Presentation.FreeLimitReachedException)
-            {
-                status.Text = "reach free limit, skipped.";
-            }
-            catch (GemBox.Document.FreeLimitReachedException)
-            {
-                status.Text = "reach free limit, skipped.";
-            }
+            });
         }
-
-        status.Text = "Done!";
-        button3.Enabled = true;
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error: {ex.ToString()}");
+        }
+        finally
+        {
+            status.Text = "Done!";
+            button3.Enabled = true;
+        }
     }
 
 
-    private void ScanDirectory(string directory, string[] extensions, List<string> results)
+    private async Task ScanDirectory(string directory, string[] extensions, List<string> results)
     {
         try
         {
-            foreach (var file in Directory.GetFiles(directory))
+            var files = await Task.Run(() => Directory.GetFiles(directory));
+            foreach (var file in files)
             {
                 var extension = Path.GetExtension(file).ToLower();
 
                 if (Array.Exists(extensions, ext => ext.ToLower() == extension))
                 {
-                    status.Text = $"Found {file}, continue scanning...";
+                    Invoke((MethodInvoker)delegate { status.Text = $"Found {file}, continue scanning..."; });
                     results.Add(file);
                 }
             }
 
-            foreach (var subDir in Directory.GetDirectories(directory)) ScanDirectory(subDir, extensions, results);
+            var dirs = await Task.Run(() => Directory.GetDirectories(directory));
+            foreach (var subDir in dirs) await ScanDirectory(subDir, extensions, results);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error accessing {directory}: {ex.Message}");
+            MessageBox.Show($"Error accessing {directory}: {ex.Message}");
+        }
+    }
+}
+
+public static class FileExtensions
+{
+    // 异步文件复制
+    public static async Task CopyAsync(this string sourceFile, string destinationFile, bool overwrite)
+    {
+        using (var sourceStream = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
+                   FileOptions.Asynchronous))
+        using (var destinationStream = new FileStream(destinationFile, FileMode.Create, FileAccess.Write,
+                   FileShare.None, 4096, FileOptions.Asynchronous))
+        {
+            await sourceStream.CopyToAsync(destinationStream);
         }
     }
 }
