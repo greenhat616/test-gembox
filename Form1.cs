@@ -188,9 +188,10 @@ public partial class Form1 : Form
                         Invoke((MethodInvoker)delegate { status.Text = $"Processed {item}"; });
                         successItems.Add(item);
                     }
-                    catch (GemBox.Presentation.FreeLimitReachedException)
+                    catch (Exception ex)
                     {
                         failedItems.Add(item);
+                        Task.Run(() => MessageBox.Show($"Error processing {item}: {ex.ToString()}"));
                     }
             });
         }
@@ -214,6 +215,9 @@ public partial class Form1 : Form
         sb.AppendLine("");
         sb.AppendLine("Failed Items:");
         foreach (var item in failedItems) sb.AppendLine($"  {item}");
+        sb.AppendLine("");
+        sb.AppendLine("");
+        sb.AppendLine($"Total: {failedItems.Count + successItems.Count}; success count: {successItems.Count}; failed count: {failedItems.Count}");
 
         await File.WriteAllTextAsync(tempFilePath, sb.ToString());
         Process.Start(new ProcessStartInfo
