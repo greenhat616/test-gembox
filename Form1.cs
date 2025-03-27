@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Windows.Controls;
+using GemBox.Presentation;
 
 namespace test_gemBox_ui;
 
@@ -126,28 +127,29 @@ public partial class Form1 : Form
                             {
                                 var sb = new StringBuilder();
 
-                                var slide = presentation.Slides[0];
-
-                                foreach (var shape in slide.Content.Drawings.OfType<GemBox.Presentation.Shape>())
+                                foreach (var slide in presentation.Slides)
                                 {
-                                    sb.AppendFormat("Shape ShapeType={0}:", shape.ShapeType);
-                                    sb.AppendLine();
-
-                                    foreach (var paragraph in shape.Text.Paragraphs)
+                                    foreach (var shape in slide.Content.Drawings.OfType<GemBox.Presentation.Shape>())
                                     {
-                                        foreach (var run in paragraph.Elements.OfType<GemBox.Presentation.TextRun>())
-                                        {
-                                            var isBold = run.Format.Bold;
-                                            var text = run.Text;
+                                        sb.AppendFormat("Shape ShapeType={0}:", shape.ShapeType);
+                                        sb.AppendLine();
 
-                                            sb.AppendFormat("{0}{1}{2}", isBold ? "<b>" : "", text,
-                                                isBold ? "</b>" : "");
+                                        foreach (var paragraph in shape.Text.Paragraphs)
+                                        {
+                                            foreach (var run in paragraph.Elements.OfType<GemBox.Presentation.TextRun>())
+                                            {
+                                                var isBold = run.Format.Bold;
+                                                var text = run.Text;
+
+                                                sb.AppendFormat("{0}{1}{2}", isBold ? "<b>" : "", text,
+                                                    isBold ? "</b>" : "");
+                                            }
+
+                                            sb.AppendLine();
                                         }
 
-                                        sb.AppendLine();
+                                        sb.AppendLine("----------");
                                     }
-
-                                    sb.AppendLine("----------");
                                 }
 
                                 var out_file = outPathText + stripped_item_path + ".txt";
