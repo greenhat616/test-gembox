@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Windows.Controls;
 
@@ -82,6 +83,8 @@ public partial class Form1 : Form
         string[] exts = { ".ppt", ".pptx", ".pdf", ".doc", ".docx" };
 
         status.Text = "Scanning...";
+        var successItems = new List<string>();
+        var failedItems = new List<string>();
         try
         {
             var outPathText = outPath.Text;
@@ -103,13 +106,11 @@ public partial class Form1 : Form
                             MessageBox.Show("Invalid directory name, skipped.");
                             continue;
                         }
+
                         if (!Directory.Exists(directoryName)) Directory.CreateDirectory(directoryName);
 
                         // if file path is hidden or tmp office file, skipped
-                        if (fileName.StartsWith(".") || fileName.StartsWith("~"))
-                        {
-                            continue;
-                        }
+                        if (fileName.StartsWith(".") || fileName.StartsWith("~")) continue;
 
                         if (copyRaw.Checked)
                         {
@@ -183,14 +184,11 @@ public partial class Form1 : Form
                         }
 
                         Invoke((MethodInvoker)delegate { status.Text = $"Processed {item}"; });
+                        successItems.Add(item);
                     }
                     catch (GemBox.Presentation.FreeLimitReachedException)
                     {
-                        Invoke((MethodInvoker)delegate { status.Text = "reach free limit, skipped."; });
-                    }
-                    catch (GemBox.Document.FreeLimitReachedException)
-                    {
-                        Invoke((MethodInvoker)delegate { status.Text = "reach free limit, skipped."; });
+                        failedItems.Add(item);
                     }
             });
         }
@@ -203,6 +201,24 @@ public partial class Form1 : Form
             status.Text = "Done!";
             button3.Enabled = true;
         }
+
+        var tempDir = Path.GetTempPath();
+        var tempFileName = $"tempfile_{Guid.NewGuid()}.txt";
+        var tempFilePath = Path.Combine(tempDir, tempFileName);
+        var sb = new StringBuilder();
+        sb.AppendLine("Success Items:");
+        foreach (var item in successItems) sb.AppendLine($"  {item}");
+
+        sb.AppendLine("");
+        sb.AppendLine("Failed Items:");
+        foreach (var item in failedItems) sb.AppendLine($"  {item}");
+
+        await File.WriteAllTextAsync(tempFilePath, sb.ToString());
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = tempFilePath,
+            UseShellExecute = true
+        });
     }
 
 
